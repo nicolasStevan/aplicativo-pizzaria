@@ -29,10 +29,11 @@ api.interceptors.request.use(
         const userData = JSON.parse(storedUser);
         if (userData.token) {
           config.headers.Authorization = `Bearer ${userData.token}`;
+          console.log('🔑 Token adicionado ao header da requisição');
         }
       }
     } catch (error) {
-      console.error('Erro ao obter token:', error);
+      console.error('❌ Erro ao obter token:', error);
     }
     return config;
   },
@@ -42,25 +43,29 @@ api.interceptors.request.use(
   }
 );
 
-// Interceptor para tratar respostas
+// Interceptor para tratar respostas e token expirado
 api.interceptors.response.use(
   (response) => {
     console.log(`✅ Resposta recebida: ${response.status} - ${response.config.url}`);
     return response;
   },
-  (error) => {
+  async (error) => {
     console.error('❌ Erro na resposta da API:', error);
     
     // Tratar diferentes tipos de erro
     if (error.response) {
-      // O servidor respondeu com um status de erro
       console.error('Status do erro:', error.response.status);
       console.error('Dados do erro:', error.response.data);
+      
+      // Se for erro 401 (Unauthorized), significa token expirado/inválido
+      if (error.response.status === 401) {
+        console.log('🔐 Token inválido/expirado detectado, limpando dados...');
+        await AsyncStorage.removeItem('@pizzaria_user');
+        // Aqui você poderia disparar um evento para o AuthContext fazer logout
+      }
     } else if (error.request) {
-      // A requisição foi feita mas não houve resposta
       console.error('Nenhuma resposta recebida:', error.request);
     } else {
-      // Algo aconteceu na configuração da requisição
       console.error('Erro na configuração:', error.message);
     }
     

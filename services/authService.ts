@@ -10,8 +10,8 @@ export interface AuthResponse {
     id: string;
     name: string;
     email: string;
+    token: string;
   };
-  token: string;
 }
 
 export const authService = {
@@ -37,12 +37,41 @@ export const authService = {
     }
   },
 
-  // Validar token (se houver endpoint)
+  // Validar token e obter dados do usuário (similar ao /me do Next.js)
   validateToken: async (token: string): Promise<AuthResponse> => {
     console.log('🔍 Validando token...');
-    // O interceptor já adiciona o token automaticamente
-    const response = await apiService.get('/validate-token');
-    console.log('✅ Token válido');
-    return response;
+    try {
+      // Tentar primeiro o endpoint /me (padrão mais comum)
+      const response = await apiService.get('/me');
+      console.log('✅ Token válido - endpoint /me');
+      return {
+        user: {
+          ...response,
+          token: token // Adicionar o token aos dados do usuário
+        }
+      };
+    } catch (error) {
+      // Se /me não existir, tentar /validate-token
+      try {
+        const response = await apiService.get('/validate-token');
+        console.log('✅ Token válido - endpoint /validate-token');
+        
+        // Se a resposta já tiver o token no user, usar como está
+        if (response.user && response.user.token) {
+          return response;
+        }
+        
+        // Se não, adicionar o token atual
+        return {
+          user: {
+            ...response.user || response,
+            token: token
+          }
+        };
+      } catch (secondError) {
+        console.error('❌ Token inválido em ambos endpoints');
+        throw new Error('Token inválido');
+      }
+    }
   },
 };

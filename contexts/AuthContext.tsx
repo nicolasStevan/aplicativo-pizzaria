@@ -9,6 +9,7 @@ type AuthContextType = {
   signIn: (credentials: SignInProps) => Promise<void>;
   signOut: () => Promise<void>;
   validateCurrentToken: () => Promise<boolean>;
+  refreshUserData: () => Promise<void>;
 }
 
 type UserProps = {
@@ -49,54 +50,80 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const userData = JSON.parse(storedUser);
         console.log('👤 Usuário encontrado:', userData.email);
         
-        // Por enquanto, apenas carregar sem validar token para evitar conflitos
-        console.log('✅ Carregando usuário sem validação inicial');
-        setUser(userData);
-        
-        // TODO: Validação de token pode ser feita depois se necessário
-        // if (userData.token) {
-        //   console.log('🔐 Validando token...');
-        //   try {
-        //     await authService.validateToken(userData.token);
-        //     console.log('✅ Token válido, usuário logado automaticamente');
-        //     setUser(userData);
-        //   } catch (error) {
-        //     console.log('❌ Token inválido, removendo usuário');
-        //     await AsyncStorage.removeItem(USER_KEY);
-        //   }
-        // }
+        if (userData.token) {
+          console.log('🔐 Validando token...');
+          try {
+            // Validar o token com a API
+            await authService.validateToken(userData.token);
+            console.log('✅ Token válido, usuário logado automaticamente');
+            setUser(userData);
+          } catch (error) {
+            console.log('❌ Token inválido, removendo usuário');
+            await AsyncStorage.removeItem(USER_KEY);
+            // Reset user state
+            setUser({
+              id: '',
+              name: '',
+              email: '',
+              token: ''
+            });
+          }
+        } else {
+          console.log('❌ Usuário sem token válido');
+          await AsyncStorage.removeItem(USER_KEY);
+        }
       } else {
         console.log('❌ Nenhum usuário encontrado');
       }
     } catch (error) {
       console.log('❌ Erro ao carregar usuário:', error);
+      // Em caso de erro, limpar dados possivelmente corrompidos
+      await AsyncStorage.removeItem(USER_KEY);
     } finally {
       setIsLoading(false);
     }
   }
 
   async function signIn(credentials: SignInProps): Promise<void> {
-    console.log('🔑 Fazendo login...', credentials.email);
-    const response = await authService.login(credentials);
-    console.log('✅ Login realizado:', response.user.name);
-    
-    const userData: UserProps = {
-      id: response.user.id,
-      name: response.user.name,
-      email: response.user.email,
-      token: response.token
-    };
+    try {
+      console.log('🔑 Fazendo login...', credentials.email);
+      const response = await authService.login(credentials);
+      console.log('✅ Response completa da API:', JSON.stringify(response, null, 2));
+      
+      // O token está DENTRO do objeto user, conforme sua resposta da API
+      const token = response.user.token;
+      
+      if (!token) {
+        console.error('❌ Token não encontrado na resposta:', response);
+        throw new Error('Token não recebido. Tente novamente.');
+      }
+      
+      console.log('🔑 Token encontrado:', token.substring(0, 20) + '...');
+      
+      const userData: UserProps = {
+        id: response.user.id,
+        name: response.user.name,
+        email: response.user.email,
+        token: token
+      };
 
-    console.log('📋 Dados do usuário processados:', userData);
-    console.log('🔑 Token processado:', userData.token ? 'SIM' : 'NÃO');
-    
-    setUser(userData);
-    await AsyncStorage.setItem(USER_KEY, JSON.stringify(userData));
-    console.log('💾 Usuário salvo no storage');
-    
-    // Verificar se foi salvo mesmo
-    const verification = await AsyncStorage.getItem(USER_KEY);
-    console.log('🔍 Verificação: dados salvos =', !!verification);
+      console.log('📋 Dados do usuário processados:', userData);
+      console.log('🔑 Token processado:', userData.token ? 'SIM' : 'NÃO');
+      
+      setUser(userData);
+      await AsyncStorage.setItem(USER_KEY, JSON.stringify(userData));
+      console.log('💾 Usuário salvo no storage');
+      
+      // Verificar se foi salvo mesmo
+      const verification = await AsyncStorage.getItem(USER_KEY);
+      const savedData = verification ? JSON.parse(verification) : null;
+      console.log('🔍 Verificação: dados salvos =', !!verification);
+      console.log('🔍 Token salvo:', savedData?.token ? 'SIM' : 'NÃO');
+      
+    } catch (error: any) {
+      console.error('❌ Erro no login:', error);
+      throw new Error(error.message || 'Erro ao fazer login. Verifique suas credenciais.');
+    }
   }
 
   async function signOut(): Promise<void> {
@@ -129,6 +156,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  async function refreshUserData(): Promise<void> {
+    if (!user.token) {
+      console.log('❌ Nenhum token para atualizar dados do usuário');
+      return;
+    }
+
+    try {
+      console.log('🔄 Atualizando dados do usuário...');
+      const response = await authService.validateToken(user.token);
+      
+      const updatedUserData: UserProps = {
+        id: response.user.id,
+        name: response.user.name,
+        email: response.user.email,
+        token: response.user.token // Usar o token da resposta
+      };
+
+      setUser(updatedUserData);
+      await AsyncStorage.setItem(USER_KEY, JSON.stringify(updatedUserData));
+      console.log('✅ Dados do usuário atualizados');
+    } catch (error) {
+      console.log('❌ Erro ao atualizar dados do usuário, fazendo logout automático');
+      await signOut();
+    }
+  }
+
   return (
     <AuthContext.Provider value={{ 
       user, 
@@ -136,7 +189,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isLoading, 
       signIn, 
       signOut,
-      validateCurrentToken
+      validateCurrentToken,
+      refreshUserData
     }}>
       {children}
     </AuthContext.Provider>

@@ -5,85 +5,65 @@ import {
   View,
   TouchableOpacity,
   SafeAreaView,
-  Alert,
+  TextInput,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
+import ProtectedRoute from '../components/ProtectedRoute';
+import { useState } from 'react';
 
 export default function HomeScreen() {
-  const { user, signOut, validateCurrentToken } = useAuth();
+  const { user, signOut } = useAuth();
   const router = useRouter();
-
-  console.log('🏠 Home renderizada:');
-  console.log('   - user.name:', user.name);
-  console.log('   - user.email:', user.email);
-  console.log('   - user.token:', user.token ? 'EXISTE' : 'NÃO EXISTE');
-  console.log('   - user completo:', user);
+  const [tableNumber, setTableNumber] = useState('');
 
   const handleLogout = async () => {
-    console.log('🚪 Fazendo logout manual...');
+    console.log('🚪 Fazendo logout...');
     await signOut();
     router.replace('/login');
   };
 
-  const handleForceLogout = async () => {
-    console.log('🔄 Forçando logout e limpeza...');
-    await signOut();
-    // Força redirecionamento
-    setTimeout(() => {
-      router.replace('/login');
-    }, 100);
-  };
-
-  const handleValidateToken = async () => {
-    console.log('🔍 Testando validação de token...');
-    const isValid = await validateCurrentToken();
-    if (isValid) {
-      Alert.alert('✅ Token Válido', 'Seu token está funcionando perfeitamente!');
-    } else {
-      Alert.alert('❌ Token Inválido', 'Você será redirecionado para o login.');
-      router.push('/login');
+  const handleOpenTable = () => {
+    if(tableNumber.trim() === '') {
+      console.log('❌ Número da mesa não pode estar vazio!');
+      return;
     }
-  };
-
-  if (!user.token) {
-    console.log('❌ Home: Nenhum token, retornando tela de erro');
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.content}>
-          <Text style={styles.welcome}>🍕</Text>
-          <Text style={styles.title}>Sem token...</Text>
-          <Text style={styles.subtitle}>Você precisa fazer login novamente</Text>
-          
-          <TouchableOpacity 
-            style={styles.logoutButton} 
-            onPress={handleForceLogout}
-          >
-            <Text style={styles.logoutButtonText}>🔓 Ir para Login</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
+    
+    // Navegar para order.tsx passando os parâmetros
+    router.push({
+      pathname: '/order',
+      params: {
+        number: tableNumber,
+        order_id: Math.random().toString(36).substr(2, 9) // Gerar um ID temporário
+      }
+    });
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.welcome}>🍕</Text>
-        <Text style={styles.title}>Olá, {user.name}!</Text>
-        <Text style={styles.subtitle}>Bem-vindo ao Amigo Pizza!</Text>
-        
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity style={styles.validateButton} onPress={handleValidateToken}>
-            <Text style={styles.validateButtonText}>🔍 Validar Token</Text>
+    <ProtectedRoute>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.content}>
+          <Text style={styles.welcome}>🍕</Text>
+
+          <Text style={styles.title}> Novo Pedido </Text>
+          <TextInput 
+            style={styles.input} 
+            keyboardType='numeric' 
+            placeholder="Digite o número da mesa" 
+            value={tableNumber} 
+            onChangeText={setTableNumber} 
+          />
+
+          <TouchableOpacity style={styles.logoutButton} onPress={handleOpenTable}>
+            <Text style={styles.logoutButtonText}>Abrir Mesa</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <Text style={styles.logoutButtonText}>🚪 Sair</Text>
-          </TouchableOpacity>
+
+            {/* <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+              <Text style={styles.logoutButtonText}>🚪 Sair</Text>
+            </TouchableOpacity> */}
         </View>
-      </View>
-    </SafeAreaView>
+      </SafeAreaView>
+    </ProtectedRoute>
   );
 }
 
@@ -114,22 +94,6 @@ const styles = StyleSheet.create({
     marginBottom: 40,
     textAlign: 'center',
   },
-  buttonContainer: {
-    gap: 15,
-  },
-  validateButton: {
-    backgroundColor: '#10B981',
-    paddingHorizontal: 32,
-    paddingVertical: 16,
-    borderRadius: 8,
-    minWidth: 200,
-    alignItems: 'center',
-  },
-  validateButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
   logoutButton: {
     backgroundColor: '#DC2626',
     paddingHorizontal: 32,
@@ -142,5 +106,14 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  input: {
+    height: 40,
+    borderColor: '#ccc',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    marginBottom: 20,
+    width: '100%',
   },
 });
